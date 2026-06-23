@@ -107,16 +107,12 @@ For each `### Drill` block found:
 - **Session formula populated**: the quoted formula string must contain actual values, not bracket placeholders
 - **Drill count**: number of Drill blocks must equal number of expected_chunks
 
-### 4. Flashcard widget completeness (severity: error)
+### 4. Flashcard section presence (severity: error)
 
-Inside the `html` code block:
-
-- `cards` array must exist and contain at least 5 objects
-- Each card object must have both `front` and `back` keys with non-empty string values
-- Must NOT contain `// add more cards`, `// TODO`, `// ...`, or any JS comment indicating truncation
-- Must contain a `render()` or equivalent function call
-- Must contain navigation (prev/next) logic
-- `cards.length` must be ≥ 5 — count the actual `{` objects inside the array
+The Interactive Flashcards section must contain a markdown link to a separate `.html` file:
+- Must contain a `[text](./something-flashcards.html)` link — not a fenced code block
+- The link text should describe what the file contains
+- Do NOT flag absence of an inline html code block — flashcards are now saved as a separate file
 
 ### 5. Mermaid syntax plausibility (severity: warning)
 
@@ -135,7 +131,7 @@ Inside the `html` code block:
 ### 7. At a Glance table (severity: error)
 
 - Must have rows for: Your goal, Experience level, Core concepts, Estimated time, Session length
-- "Your goal" must match `user_purpose` (not be a bracket placeholder)
+- "Your goal" must contain the substance of `user_purpose` (which may be a joined multi-select string like "Ace interviews + Design systems at work") — not be a bracket placeholder
 - "Experience level" must match `experience_level`
 - "Session length" must match `session_minutes` + " min"
 - "Estimated time" must contain actual numbers, not placeholders

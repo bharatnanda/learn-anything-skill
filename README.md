@@ -2,13 +2,15 @@
 
 A Claude Code skill that generates structured, visually rich learning guides for any topic using the **Expert Learning Framework** (5-phase methodology based on cognitive science research).
 
-Type `/learn SQL window functions` and get a complete, personalised guide in minutes — with Mermaid diagrams, measurable practice drills, an interactive flashcard widget, and a spaced repetition schedule.
+Type `/learn SQL window functions` and get a complete, personalised guide in minutes — with Mermaid diagrams, measurable practice drills, an interactive flashcard app, and a spaced repetition schedule.
 
 ---
 
 ## What it produces
 
-For any topic you name, the skill generates a single `.md` file containing:
+For any topic, the skill generates two files in your current directory:
+
+**`<topic>-learning-guide.md`** — the full guide:
 
 | Section | What's inside |
 |---|---|
@@ -19,8 +21,9 @@ For any topic you name, the skill generates a single `.md` file containing:
 | **Phase 4: Feedback Loop Setup** | Adapted to the skill type (technical / creative / interpersonal / physical) |
 | **Phase 5: Spaced Repetition Schedule** | Day 1 / 3 / 7 / 14 / 30 review tasks, topic-specific |
 | **Quick Reference Checklist** | Before / during / long-term retention checklists |
-| **Interactive Flashcards** | Self-contained HTML widget — flip, prev/next, card counter |
 | **Resources** | Best single resource per concept, sourced via live web research |
+
+**`<topic>-flashcards.html`** — a standalone interactive flashcard app. Open in any browser — no server needed. Flip animation, prev/next buttons, keyboard shortcuts (`←` `→` `Space`), dark mode support.
 
 ---
 
@@ -37,8 +40,6 @@ cd learn-skill
 Restart Claude Code. Run `/learn` to get started.
 
 ### Option B — Download zip only
-
-If you just want the prebuilt artifact without cloning:
 
 ```bash
 # Download learn.skill from the releases page, then:
@@ -57,12 +58,12 @@ The `.skill` file is a standard zip — it extracts to `~/.claude/skills/learn/`
 /learn negotiation skills
 /learn jazz piano fundamentals
 /learn Docker networking
-/learn machine learning fundamentals
+/learn system design
 ```
 
-**First run:** Claude will ask 2–3 questions (your goal, experience level, session length) and save them to `~/.claude/learn-preferences.json`.
+**First run:** Claude asks your goal (multi-select), focus area, experience level, and session length. Saved to `~/.claude/learn-preferences.json`.
 
-**Subsequent runs:** Preferences are loaded automatically — only your goal for the new topic is asked.
+**Subsequent runs:** Session length is reused globally. Experience level is stored per topic — you'll be asked again for new topics (you may be an expert at Python but a beginner at negotiation). Only your goal for the new topic is always asked.
 
 To update your preferences, say: *"update my learning preferences"*
 
@@ -72,21 +73,45 @@ To update your preferences, say: *"update my learning preferences"*
 
 ```
 /learn <topic>
-  ├── Load stored preferences (~/.claude/learn-preferences.json)
-  ├── Ask: purpose + experience level + session length (first run only)
+  ├── Load preferences (~/.claude/learn-preferences.json)
+  │     ├── default_session_minutes  — global, asked once
+  │     └── topics.<slug>.experience_level  — per topic, asked for new topics
+  ├── Ask: goal (multi-select) + focus area + experience level (if new topic)
   ├── Decompose topic into 4–8 ordered learning chunks
   ├── Workflow: parallel web research agents (one per chunk)
-  │     ├── WebSearch for best resource per chunk
-  │     ├── WebSearch for common beginner mistakes
+  │     ├── WebSearch: best resource per chunk
+  │     ├── WebSearch: common beginner mistakes
   │     └── Return: key concepts, drill, resource, connections
-  ├── Synthesise into full guide (all 9 sections)
-  ├── Review agent: verify completeness before saving
-  │     └── Checks: sections present, drills measurable, flashcards complete,
-  │           no template placeholders, resources have real URLs
-  └── Save <topic-slug>-learning-guide.md to current directory
+  ├── Synthesise full guide (8 sections) + flashcard HTML file
+  ├── Review agent: verify quality before saving
+  │     └── Checks: all sections present, drills measurable,
+  │           no placeholders, resources have real URLs
+  ├── Save <topic-slug>-learning-guide.md
+  └── Save <topic-slug>-flashcards.html
 ```
 
-The review step runs against a spec bundled inside `learn.skill` — no external agent files needed.
+The review spec is bundled inside `learn.skill` — no external agent files needed.
+
+---
+
+## Preferences schema
+
+```json
+{
+  "default_session_minutes": 25,
+  "learning_style_notes": "",
+  "topics": {
+    "sql-window-functions": {
+      "experience_level": "intermediate",
+      "focus_areas": ["Ranking functions"]
+    },
+    "system-design": {
+      "experience_level": "some",
+      "focus_areas": ["Scalability fundamentals", "Distributed systems"]
+    }
+  }
+}
+```
 
 ---
 

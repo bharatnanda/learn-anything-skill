@@ -40,46 +40,60 @@ Store as `TOPIC`. Example: `/learn SQL window functions` → TOPIC = "SQL window
 
 ## STEP 2 — Load stored preferences
 
-Read the file `~/.claude/learn-preferences.json` using the Read tool (path: `/Users/<username>/.claude/learn-preferences.json` — use Bash `echo $HOME` to get the home dir first, then construct the path).
+Use Bash to get the home directory (`echo $HOME`), then Read `~/.claude/learn-preferences.json`.
 
-If the file exists and is valid JSON, parse it. The schema is:
+The schema is:
 ```json
 {
-  "experience_level": "beginner|some|intermediate|expert",
-  "session_minutes": 15 | 25 | 45,
-  "learning_style_notes": "free text",
-  "past_topics": ["..."]
+  "default_session_minutes": 25,
+  "learning_style_notes": "",
+  "topics": {
+    "sql-window-functions": { "experience_level": "intermediate", "focus_areas": ["Ranking functions"] },
+    "jazz-piano": { "experience_level": "beginner", "focus_areas": ["Chord progressions", "Improvisation"] }
+  }
 }
 ```
 
-Note which fields are already populated. Missing or null fields must be asked in Step 3.
+Compute `TOPIC_SLUG` = TOPIC lowercased, spaces → hyphens, special chars removed (same slug used for the output filename).
+
+From the loaded file, extract:
+- `STORED_SESSION_MINUTES` = `default_session_minutes` (null if missing)
+- `STORED_EXPERIENCE` = `topics[TOPIC_SLUG].experience_level` (null if this topic slug not present)
+- `STORED_STYLE` = `learning_style_notes` (null if missing)
+- `STORED_FOCUS_AREAS` = `topics[TOPIC_SLUG].focus_areas` (null if not present — for reference only, angle is always asked)
+
+**Schema migration:** If the file uses the old flat schema (`experience_level` at top level, `past_topics` array), silently migrate on save in Step 4 — move `experience_level` into `topics[TOPIC_SLUG]`, rename `session_minutes` → `default_session_minutes`, drop `past_topics`.
 
 ---
 
 ## STEP 3 — Ask follow-up questions
 
-**Always ask** (topic-specific, every run):
-Use AskUserQuestion with 1–2 questions:
+Batch all questions into a single AskUserQuestion call (max 4 questions). Only include a question if the answer is not already stored.
 
-1. "What do you need to be able to DO with [TOPIC] when you're done?" — This is the minimum viable outcome. Options: offer 3–4 common use cases for this topic + "Other" so user can type their own.
-2. "Any specific angle, sub-area, or constraint to focus on?" — Only ask this if the topic is broad (e.g. "machine learning" or "piano"). Skip for narrow topics. Options: list 3–4 natural sub-areas + "No constraint, cover the essentials".
+**Always ask** (topic-specific, never stored):
 
-**Ask only if not already stored** (preference fields):
+1. "What do you need to be able to DO with [TOPIC] when you're done?" — Minimum viable outcome. Offer 3–4 common use cases for this topic + "Other". Use `multiSelect: true` — users often have more than one goal and all should shape the guide.
+2. "Any specific angle, sub-area, or constraint?" — Only ask if the topic is broad (e.g. "machine learning", "piano"). Skip for narrow topics. Use `multiSelect: true` — learners often want to combine angles. Always ask even if `STORED_FOCUS_AREAS` exists (intent can shift session to session). If multiple are selected, intersect them into a focused scope for the guide.
 
-If `experience_level` is missing: "How familiar are you already with [TOPIC] or related concepts?" — Options: Beginner (never touched it), Some exposure (seen it, can't use it), Intermediate (can use basics), Expert (comfortable, want to go deeper).
+**Ask only if not already stored:**
 
-If `session_minutes` is missing: "How long can you practice per session?" — Options: 15 min (light), 25 min (standard), 45 min (deep work).
+- If `STORED_EXPERIENCE` is null: "How familiar are you with [TOPIC]?" — Options: Beginner (never touched it), Some exposure (seen it, can't use it), Intermediate (can use basics), Expert (comfortable, want to go deeper).
+- If `STORED_SESSION_MINUTES` is null: "How long can you practice per session?" — Options: 15 min (light), 25 min (standard), 45 min (deep work).
 
-Batch all missing preference questions into a single AskUserQuestion call (max 4 questions per call). Do not ask about fields that are already stored.
+Experience level is stored per topic — a returning user learning a new topic will be asked again. That's correct: they may be an expert at Python but a beginner at jazz piano.
 
 ---
 
 ## STEP 4 — Save updated preferences
 
-After collecting answers, write/update `~/.claude/learn-preferences.json`:
-- Merge new answers with any existing values (don't overwrite fields the user didn't answer)
-- Append TOPIC to `past_topics` array (avoid duplicates)
-- Use Write tool to save the file
+Merge answers into the preferences file and write it back:
+- Set `topics[TOPIC_SLUG].experience_level` from the answer (or existing `STORED_EXPERIENCE`)
+- Set `topics[TOPIC_SLUG].focus_areas` from the angle answer (array of selected strings; omit if angle question was skipped for narrow topics)
+- Set `default_session_minutes` from the answer (or existing `STORED_SESSION_MINUTES`)
+- Preserve all other existing topic entries unchanged
+- Use Write tool to save
+
+When injecting `user_purpose` into the guide (At a Glance "Your goal" row, Workflow prompt, reviewer context): join the selected goals array with " + " → e.g. `"Ace system design interviews + Design systems at work"`.
 
 ---
 
@@ -370,26 +384,30 @@ Add the synthesis connections below the table: for each connection from `learnin
 
 ---
 
-### Section 8: Interactive Flashcards (HTML)
+### Section 8: Interactive Flashcards (separate HTML file)
 
-Write an HTML block in the markdown file as a fenced code block with language `html`. The widget must:
-- Contain 5–8 cards drawn from the key_concepts across all chunks
-- Each card has: front (a question or concept prompt), back (answer + "→ connects to: [chunk]" note)
-- Flip animation on card click
-- Prev/Next navigation buttons
-- Card counter (e.g. "Card 3 of 7")
-- Use CSS variables for theming (`--background`, `--foreground`, `--primary`, etc.)
-- Be fully self-contained (no external deps)
+Do NOT embed the flashcard as a fenced code block in the markdown — it will render as source code, not as an interactive widget.
 
-Example card structure to adapt:
-```javascript
-const cards = [
-  { front: "What does PARTITION BY do in a window function?", back: "Divides rows into groups (partitions) for independent window calculations — like GROUP BY but without collapsing rows.\n→ connects to: Window Frame Boundaries" },
-  // ...
-]
+Instead:
+1. Write the complete flashcard widget as a standalone HTML file: `./<topic-slug>-flashcards.html`
+2. In the markdown guide, replace this section with a single link:
+
+```markdown
+## Interactive Flashcards
+
+[Open flashcards](./<topic-slug>-flashcards.html) — 7 cards covering key concepts across all chunks.
 ```
 
-Write the complete HTML widget. Do not truncate it.
+The HTML file must:
+- Be a complete standalone document (`<!DOCTYPE html>`, `<html>`, `<head>`, `<body>`)
+- Contain 5–8 cards drawn from key_concepts across all chunks
+- Each card: front (question/concept prompt), back (answer + "→ connects to: [chunk]" note)
+- Flip animation on card click
+- Prev/Next navigation buttons + card counter (e.g. "Card 3 of 7")
+- Dark/light mode support via `prefers-color-scheme` media query
+- Be fully self-contained (no external deps)
+
+Write the complete HTML file. Do not truncate it.
 
 ---
 

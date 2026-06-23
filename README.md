@@ -17,7 +17,7 @@ For any topic, the skill generates two files in your current directory:
 | **At a Glance** | Your goal, experience level, estimated time to competency |
 | **Phase 1: Mental Model** | Feynman-style explanation, best analogy, Mermaid mindmap |
 | **Phase 2: Core Curriculum** | The 20% of concepts that unlock 80% of use, concept table, learning-path flowchart |
-| **Phase 3: Deliberate Practice Drills** | One drill per chunk — each with a measurable success condition and session formula |
+| **Phase 3: Deliberate Practice Drills** | One drill per chunk — measurable success condition, session formula; completed chunks show ✓ instead of full drill |
 | **Phase 4: Feedback Loop Setup** | Adapted to the skill type (technical / creative / interpersonal / physical) |
 | **Phase 5: Spaced Repetition Schedule** | Day 1 / 3 / 7 / 14 / 30 review tasks, topic-specific |
 | **Quick Reference Checklist** | Before / during / long-term retention checklists |
@@ -59,13 +59,20 @@ The `.skill` file is a standard zip — it extracts to `~/.claude/skills/learn/`
 /learn jazz piano fundamentals
 /learn Docker networking
 /learn system design
+
+/learn list                  ← see all topics studied so far
 ```
 
 **First run:** Claude asks your goal (multi-select), focus area, experience level, and session length. Saved to `~/.claude/learn-preferences.json`.
 
-**Subsequent runs:** Session length is reused globally. Experience level is stored per topic — you'll be asked again for new topics (you may be an expert at Python but a beginner at negotiation). Only your goal for the new topic is always asked.
+**Subsequent runs on the same topic:** Detects the existing guide file and asks what you want to do:
+- **Regenerate from scratch** — re-research and rebuild the full guide
+- **Update goals only** — re-ask questions and save preferences, no research
+- **Cancel** — leave everything unchanged
 
-To update your preferences, say: *"update my learning preferences"*
+Focus areas from your last session appear pre-selected so you can keep or adjust them. After each regeneration you're asked which chunks you've completed — they'll be marked ✓ and skip their drills on the next run.
+
+**New topic:** Experience level is asked per topic — you may be an expert at Python but a beginner at negotiation.
 
 ---
 
@@ -73,13 +80,16 @@ To update your preferences, say: *"update my learning preferences"*
 
 ```
 /learn <topic>
+  ├── Check for existing guide in CWD → Regenerate / Update goals / Cancel
   ├── Load preferences (~/.claude/learn-preferences.json)
-  │     ├── default_session_minutes  — global, asked once
-  │     └── topics.<slug>.experience_level  — per topic, asked for new topics
-  ├── Ask: goal (multi-select) + focus area + experience level (if new topic)
+  │     ├── default_session_minutes       — global, asked once
+  │     ├── topics.<slug>.experience_level — per topic, asked for new topics
+  │     ├── topics.<slug>.focus_areas      — pre-selected on re-runs
+  │     └── topics.<slug>.completed_chunks — marked ✓ in drills section
+  ├── Ask: goal (multi-select) + focus area (pre-selected) + experience (if new)
   ├── Decompose topic into 4–8 ordered learning chunks
   ├── Workflow: parallel web research agents (one per chunk)
-  │     ├── WebSearch: best resource per chunk
+  │     ├── WebSearch: best resource per chunk (weighted toward focus areas)
   │     ├── WebSearch: common beginner mistakes
   │     └── Return: key concepts, drill, resource, connections
   ├── Synthesise full guide (8 sections) + flashcard HTML file
@@ -87,7 +97,11 @@ To update your preferences, say: *"update my learning preferences"*
   │     └── Checks: all sections present, drills measurable,
   │           no placeholders, resources have real URLs
   ├── Save <topic-slug>-learning-guide.md
-  └── Save <topic-slug>-flashcards.html
+  ├── Save <topic-slug>-flashcards.html
+  └── Ask: which chunks completed? → save progress to preferences
+
+/learn list
+  └── Print all studied topics with experience, focus areas, completed chunks
 ```
 
 The review spec is bundled inside `learn.skill` — no external agent files needed.
@@ -103,11 +117,15 @@ The review spec is bundled inside `learn.skill` — no external agent files need
   "topics": {
     "sql-window-functions": {
       "experience_level": "intermediate",
-      "focus_areas": ["Ranking functions"]
+      "focus_areas": ["Ranking functions"],
+      "completed_chunks": ["PARTITION BY vs GROUP BY", "Ranking functions"],
+      "chunks": ["PARTITION BY vs GROUP BY", "Ranking functions", "Window frame boundaries", "Named windows"]
     },
     "system-design": {
       "experience_level": "some",
-      "focus_areas": ["Scalability fundamentals", "Distributed systems"]
+      "focus_areas": ["Scalability fundamentals", "Distributed systems"],
+      "completed_chunks": [],
+      "chunks": ["Scalability Basics", "Load Balancing & Caching", "Database Design", "CAP Theorem", "Distributed Patterns", "API Design", "Interview Framework"]
     }
   }
 }

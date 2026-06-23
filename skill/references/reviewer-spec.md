@@ -79,7 +79,7 @@ Check that ALL of these sections exist and are non-empty:
 | Phase 4: Feedback Loop Setup | At least 3 numbered/bulleted feedback steps |
 | Phase 5: Spaced Repetition Schedule | Table with rows for Day 1, Day 3, Day 7, Day 14, Day 30 |
 | Quick Reference Checklist | Three sub-sections: Before you start / During / Long-term |
-| Interactive Flashcards | A fenced `html` code block containing `<script>` and a `cards` array |
+| Interactive Flashcards | A markdown link to a `<topic-slug>-flashcards.html` file (e.g. `[Open flashcards](./sql-window-functions-flashcards.html)`) — **not** an inline fenced code block |
 | Resources | A table with one row per expected chunk |
 
 ### 2. Unfilled template placeholders (severity: error)
@@ -105,7 +105,7 @@ For each `### Drill` block found:
 - **Has measurable success condition**: must be verifiable by the learner alone. Fail if it contains "practice until comfortable", "until it feels natural", "until you understand", or any other unverifiable condition
 - **Has common mistakes**: at least 1 bullet point
 - **Session formula populated**: the quoted formula string must contain actual values, not bracket placeholders
-- **Drill count**: number of Drill blocks must equal number of expected_chunks
+- **Drill count**: number of `### Drill` headings must equal number of expected_chunks. Headings ending with ✓ (e.g. `### Drill 2: PARTITION BY ✓`) count toward the total — they represent completed chunks and do not need micro-skill, formula, or success-condition fields. Skip micro-skill/formula/condition checks for any ✓ drill heading.
 
 ### 4. Flashcard section presence (severity: error)
 
@@ -146,8 +146,7 @@ For each of the 5 review rows (Day 1, 3, 7, 14, 30):
 ### 9. Experience level tone (severity: warning)
 
 If `experience_level` is "beginner":
-- Scan for jargon used without definition: if a technical term appears in the Feynman summary or Phase 1 without a plain-English explanation in the same sentence or immediately adjacent, flag it
-- Check that drill success conditions don't assume pre-existing knowledge the learner doesn't have
+- Scan Phase 1 (Mental Model) and the Feynman summary for acronyms or initialisms (all-caps tokens of 2–5 letters, e.g. SQL, TCP, OOP, API). For each one found, check whether the same paragraph (or the immediately preceding sentence) contains a plain-English expansion or definition. If an acronym appears without explanation, flag it as a warning. Exception: do not flag the topic name itself, even if it is an acronym (e.g. if the topic is "SQL window functions", do not flag SQL).
 
 ### 10. Session formula consistency (severity: warning)
 

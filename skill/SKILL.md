@@ -35,11 +35,21 @@ You are an expert learning coach. When this skill is invoked, you generate a com
 
 The topic is everything the user typed after `/learn`. If args is empty or unclear, ask the user "What topic do you want to learn?" before proceeding.
 
-Store as `TOPIC`. Example: `/learn SQL window functions` → TOPIC = "SQL window functions".
+Store as `TOPIC`. Then follow these three blocks in order — do not skip ahead.
 
-**`/learn list` subcommand:** If TOPIC is exactly "list" (case-insensitive), do not generate a guide. Instead:
+---
+
+### 1a. `/learn list` check
+
+If TOPIC is exactly "list" (case-insensitive), do not generate a guide. Instead:
+
 1. Use Bash to get `$HOME`, then Read `$HOME/.claude/learn-preferences.json`
-2. Format and print the topics table, then stop:
+2. If the file does not exist, output: "No topics studied yet. Run `/learn <topic>` to get started." and stop.
+3. Otherwise, iterate over every key in the `topics` object. For each key (topic slug), print one table row:
+   - **Topic**: the slug key
+   - **Experience**: `experience_level` value, or `—` if missing
+   - **Focus areas**: `focus_areas` joined with `, `, or `—` if empty/missing
+   - **Completed chunks**: `completed_chunks` joined with `, `, or `—` if empty/missing
 
 ```
 Topics you've studied:
@@ -50,11 +60,23 @@ Topics you've studied:
 | system-design | some | Scalability, Distributed systems | — |
 ```
 
-If no preferences file exists, output: "No topics studied yet. Run `/learn <topic>` to get started."
+Stop after printing. Do not proceed to 1b or 1c.
 
-**Compute `TOPIC_SLUG`** = TOPIC lowercased, spaces → hyphens, special chars removed. Example: "SQL window functions" → "sql-window-functions". Store for use throughout all steps.
+---
 
-**Existing guide detection:** Use Bash to check if `./<TOPIC_SLUG>-learning-guide.md` exists in the current working directory.
+### 1b. Compute `TOPIC_SLUG`
+
+`TOPIC_SLUG` = TOPIC lowercased → spaces replaced with `-` → all characters except `[a-z0-9-]` removed → consecutive hyphens collapsed to one → leading/trailing hyphens stripped → if result is empty, use `topic` as fallback.
+
+Example: "SQL window functions" → "sql-window-functions". Example: "C++ (advanced)" → "c-advanced".
+
+Store `TOPIC_SLUG` for use throughout all steps.
+
+---
+
+### 1c. Existing guide detection
+
+Use Bash to check if `./<TOPIC_SLUG>-learning-guide.md` exists in the current working directory.
 
 If the file **exists**, call AskUserQuestion with one question:
 - Header: "Existing guide"
@@ -66,7 +88,7 @@ If the file **exists**, call AskUserQuestion with one question:
 
 Handle the answer before proceeding:
 - **Cancel** → output "Existing guide unchanged: `./<TOPIC_SLUG>-learning-guide.md`" and stop.
-- **Update goals only** → run Steps 2–4 only, then output "Preferences updated for [TOPIC]. Run `/learn [TOPIC]` again and choose 'Regenerate from scratch' to rebuild the guide." and stop.
+- **Update goals only** → run Steps 2–4, then ask: "Rebuild the guide now with updated preferences?" Options: "Yes, regenerate" / "No, I'll do it later". If Yes → proceed from Step 5. If No → output "Preferences updated for [TOPIC]. Run `/learn [TOPIC]` again when ready to rebuild." and stop.
 - **Regenerate from scratch** → proceed normally through all steps.
 
 If the file does **not** exist, proceed normally through all steps.
@@ -100,13 +122,15 @@ The schema is:
 From the loaded file, extract:
 - `STORED_SESSION_MINUTES` = `default_session_minutes` (null if missing)
 - `STORED_EXPERIENCE` = `topics[TOPIC_SLUG].experience_level` (null if this topic slug not present)
-- `STORED_STYLE` = `learning_style_notes` (null if missing)
 - `STORED_FOCUS_AREAS` = `topics[TOPIC_SLUG].focus_areas` (null if not present)
 - `STORED_COMPLETED_CHUNKS` = `topics[TOPIC_SLUG].completed_chunks` (empty array `[]` if not present)
 
-Set `IS_FIRST_RUN` = true if `STORED_EXPERIENCE` is null (topic has never been studied before), false otherwise. Used in Step 7.7.
+**Old flat schema detection:** If the file has `experience_level` at the top level (not inside a `topics` object), it uses the old schema. In this case:
+- Read the top-level `experience_level` as `STORED_EXPERIENCE` immediately (do not wait for Step 4 to migrate)
+- Set `IS_FIRST_RUN` = false (the user has studied before — the flat schema just predates per-topic storage)
+- On save in Step 4: move `experience_level` into `topics[TOPIC_SLUG]`, rename `session_minutes` → `default_session_minutes`, drop `past_topics`
 
-**Schema migration:** If the file uses the old flat schema (`experience_level` at top level, `past_topics` array), silently migrate on save in Step 4 — move `experience_level` into `topics[TOPIC_SLUG]`, rename `session_minutes` → `default_session_minutes`, drop `past_topics`.
+Otherwise (new per-topic schema): Set `IS_FIRST_RUN` = true if `STORED_EXPERIENCE` is null, false otherwise. Used in Step 7.7.
 
 ---
 
@@ -281,6 +305,8 @@ return { chunkResults: chunkResults.filter(Boolean), synthesis }
 **Note:** Do not pass `agentType` in the agent() call inside Workflow scripts — custom agent types are not available in the Workflow runtime. The detailed prompt provides equivalent guidance.
 
 After the Workflow completes, you will have `chunkResults` (array of chunk research objects) and `synthesis`. Use these in Step 7.
+
+**Guard:** If `chunkResults` is empty after filtering (all research agents failed), output: "Research failed — all chunk agents returned null. Check your internet connection or try again." and stop. Do not proceed to guide assembly.
 
 ---
 
@@ -468,13 +494,11 @@ Do NOT embed the flashcard as a fenced code block in the markdown — it will re
 
 Instead:
 
-1. **Compose the full HTML string and store it in memory as `FLASHCARD_HTML`.** You will need this variable in Step 8 to pass to `show_widget` — do not discard it after writing to disk.
+1. **Compose the full HTML string and store it in memory as `FLASHCARD_HTML`.** Do NOT write it to disk here — that happens in Step 7.6 after the reviewer approves the guide. You will need this variable in Step 7.6 and again in Step 8.
 
-2. Write `FLASHCARD_HTML` to disk as `./<topic-slug>-flashcards.html` using the Write tool.
+2. Count the actual number of cards you composed. Store as `CARD_COUNT`.
 
-3. Count the actual number of cards you wrote. Store as `CARD_COUNT`.
-
-4. In the markdown guide, add this section with the real card count:
+3. In the markdown guide, add this section with the real card count:
 
 ```markdown
 ## Interactive Flashcards
@@ -554,9 +578,14 @@ If `pass === false` (errors found):
 
 ---
 
-## STEP 7.6 — Write the verified guide to disk
+## STEP 7.6 — Write the verified guide and flashcard file to disk
 
-Write the reviewed (and if needed, corrected) guide string to `./<topic-slug>-learning-guide.md` in the current working directory using the Write tool.
+Using the Write tool, write both files to the current working directory:
+
+1. Write the reviewed (and if needed, corrected) guide string to `./<topic-slug>-learning-guide.md`
+2. Write `FLASHCARD_HTML` (assembled in Section 8 of Step 7) to `./<topic-slug>-flashcards.html`
+
+Both writes happen here — after reviewer approval — so the files on disk are always a consistent, verified pair.
 
 ---
 
@@ -573,7 +602,7 @@ For re-runs only: call AskUserQuestion with one question:
 
 Save the full selected set (not just new additions) to `topics[TOPIC_SLUG].completed_chunks` in the preferences file. Also save `topics[TOPIC_SLUG].chunks` = all chunk names from DECOMPOSITION (so `/learn list` and future runs can reference chunk names without re-decomposing).
 
-Use the Write tool to update the preferences file with both fields.
+**Before writing:** Re-read the current preferences file from disk (it may have been updated by Step 4 in this session). Merge only `completed_chunks` and `chunks` into the freshly loaded object — preserve all other fields unchanged. Then write the full merged object back using the Write tool.
 
 ---
 

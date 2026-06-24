@@ -515,7 +515,7 @@ The HTML file must:
 - Dark/light mode support via `prefers-color-scheme` media query
 - Be fully self-contained (no external deps)
 
-Write the complete HTML file. Do not truncate it.
+Compose the complete HTML. Do not truncate it. The actual disk write happens in Step 7.6.
 
 ---
 

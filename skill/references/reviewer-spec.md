@@ -75,7 +75,7 @@ Check that ALL of these sections exist and are non-empty:
 | Header + At a Glance | `## At a Glance` table with 5 rows |
 | Phase 1: Mental Model | Feynman paragraph + blockquote analogy + mermaid mindmap block |
 | Phase 2: Core Curriculum | Concept table with `\|` rows + `graph LR` mermaid block |
-| Phase 3: Deliberate Practice Drills | At least one `### Drill` heading with **Micro-skill**, **Session formula**, **Success condition** |
+| Phase 3: Deliberate Practice Drills | At least one `### Drill` heading. If any non-✓ drill exists, it must have **Micro-skill**, **Session formula**, **Success condition**. ✓ headings (completed chunks) satisfy the section check on their own — no extra fields required. |
 | Phase 4: Feedback Loop Setup | At least 3 numbered/bulleted feedback steps |
 | Phase 5: Spaced Repetition Schedule | Table with rows for Day 1, Day 3, Day 7, Day 14, Day 30 |
 | Quick Reference Checklist | Three sub-sections: Before you start / During / Long-term |

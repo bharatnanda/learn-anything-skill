@@ -12,6 +12,10 @@ description: |
   Examples: /learn SQL window functions, /learn jazz piano fundamentals, /learn async Python,
   /learn negotiation skills, /learn Docker networking.
   Run /learn list to see all topics studied so far with experience level and progress.
+  Subcommands: /learn review <topic> (daily session launcher based on spaced repetition),
+  /learn update <topic> (refresh guide with new research, skip preference questions),
+  /learn chunk <topic> <chunk-name> (deep-dive mini-guide for one chunk),
+  /learn quiz <topic> (4-question MCQ self-test from your existing guide).
 allowed-tools:
   - Read
   - Write
@@ -62,6 +66,17 @@ Topics you've studied:
 
 Stop after printing. Do not proceed to 1b or 1c.
 
+**Other subcommand routing:** If the first word of TOPIC (case-insensitive) is one of `review`, `update`, `chunk`, or `quiz`, it is a subcommand. Set SUBCOMMAND = that first word (lowercased). Set SUBCOMMAND_ARGS = everything after the first word. Jump to the corresponding flow section below and stop after completing it — do not proceed to 1b, 1c, or Steps 2–9.
+
+| First word of TOPIC | Flow |
+|---|---|
+| `review` | **Flow R** — Daily session launcher |
+| `update` | **Flow U** — Refresh guide |
+| `chunk` | **Flow C** — Chunk deep-dive |
+| `quiz` | **Flow Q** — Self-test quiz |
+
+If none of the above, TOPIC is a regular topic — proceed to 1b.
+
 ---
 
 ### 1b. Compute `TOPIC_SLUG`
@@ -95,6 +110,216 @@ If the file does **not** exist, proceed normally through all steps.
 
 ---
 
+## FLOW R — `/learn review <topic>`
+
+**Goal:** One-screen daily session launcher based on the spaced repetition schedule.
+
+1. Compute TOPIC_SLUG by applying the Step 1b slug algorithm to SUBCOMMAND_ARGS.
+
+2. Use Bash to get `$HOME`. Read `$HOME/.claude/learn-preferences.json`. If the file does not exist or `topics[TOPIC_SLUG]` is not present, output: "No guide found for [SUBCOMMAND_ARGS]. Run `/learn [SUBCOMMAND_ARGS]` to generate one first." and stop.
+
+3. Read `last_studied` from `topics[TOPIC_SLUG].last_studied`. If null or missing, output: "No study session recorded yet. Run `/learn [SUBCOMMAND_ARGS]` to generate your first guide." and stop.
+
+4. Use Bash to get today's date (`date +%Y-%m-%d`). Calculate `days_since` = today minus `last_studied` in whole days (use `date -j` on macOS or `date -d` on Linux). Map to the spaced repetition slot:
+   - 0–1 days → Day 1
+   - 2–4 days → Day 3
+   - 5–10 days → Day 7
+   - 11–21 days → Day 14
+   - 22+ days → Day 30
+
+5. Try to Read `./<TOPIC_SLUG>-learning-guide.md` from the current working directory.
+   - **If found:** Find the first `### Drill` heading that does NOT end with ` ✓` — that is the next active drill. Extract its Micro-skill and Session formula lines. Also extract the spaced repetition table row matching the current day slot (e.g. "Day 7" row).
+     - If ALL drill headings end with ` ✓` (all chunks complete): skip the drill block and print instead: "All chunks completed! Consider running `/learn quiz [SUBCOMMAND_ARGS]` to verify retention, or `/learn update [SUBCOMMAND_ARGS]` to get a refreshed guide."
+   - **If not found:** Fall back to the first chunk name in `topics[TOPIC_SLUG].chunks` as the drill reference. Review task = "Re-read your notes on [ChunkName]".
+
+6. Read `session_minutes` from `default_session_minutes` in preferences. Get `completed_chunks.length` and `chunks.length` from preferences.
+
+7. Output:
+
+```
+## [SUBCOMMAND_ARGS] — Today's Session (Day [N] review, [days_since] days since last study)
+
+**Next drill:** Drill [N]: [ChunkName]
+**Session formula:** "[session formula text from guide]"
+
+**Today's review task:** [specific task from spaced rep schedule row]
+
+**Progress:** [completed_chunks.length]/[chunks.length] chunks completed
+```
+
+Stop.
+
+---
+
+## FLOW U — `/learn update <topic>`
+
+**Goal:** Re-run research and guide generation without re-asking stored preferences.
+
+1. Compute TOPIC_SLUG by applying the Step 1b slug algorithm to SUBCOMMAND_ARGS. Use Bash to get `$HOME`. Read `$HOME/.claude/learn-preferences.json`. If `topics[TOPIC_SLUG]` is not present, output: "No preferences found for [SUBCOMMAND_ARGS]. Run `/learn [SUBCOMMAND_ARGS]` first to set up your preferences." and stop.
+
+2. Extract from preferences (same as Step 2 of the main flow):
+   - `STORED_EXPERIENCE` = `topics[TOPIC_SLUG].experience_level`
+   - `STORED_FOCUS_AREAS` = `topics[TOPIC_SLUG].focus_areas` (null if not present)
+   - `STORED_SESSION_MINUTES` = `default_session_minutes`
+   - `STORED_COMPLETED_CHUNKS` = `topics[TOPIC_SLUG].completed_chunks` (or `[]`)
+   - `STORED_PURPOSE` = `topics[TOPIC_SLUG].purpose` (null if not present)
+   - Set `IS_FIRST_RUN` = false (update is always a re-run).
+
+3. Call AskUserQuestion with **one question only**:
+   - Header: "Your goal"
+   - Question: "What do you need to be able to DO with [SUBCOMMAND_ARGS] when you're done?"
+   - Offer 3–4 common use cases for this topic + "Other". Use `multiSelect: true`.
+   - If `STORED_PURPOSE` is not null, split it on ` + ` to recover the individual goal strings, and list each one first in the options array with `description: "(previously selected)"`. Then append the remaining common use-case options for this topic.
+
+4. Set `user_purpose` = joined selected goals string (same " + " join as Step 4 of the main flow). Write `topics[TOPIC_SLUG].purpose = user_purpose` to preferences (preserve all other fields).
+
+5. Set `TOPIC` = SUBCOMMAND_ARGS. Proceed through **Steps 5 → 9** exactly as the main flow, using the values extracted in step 2 and the `user_purpose` from step 3. In Step 7.6, after writing both files, also write `last_studied` = today's date to preferences (same as the Change C instruction in Step 7.6 of the main flow).
+
+---
+
+## FLOW C — `/learn chunk <topic> <chunk-name>`
+
+**Goal:** Deep-dive mini-guide for one specific chunk.
+
+**Parsing:**
+1. Use Bash to get `$HOME`. Read `$HOME/.claude/learn-preferences.json` to get the list of known topic slugs.
+2. Try to match the leading token(s) of SUBCOMMAND_ARGS against known topic slugs (try longest match first). When matching, apply the Step 1b slug algorithm (spaces → hyphens, strip non-`[a-z0-9-]`, collapse) to each space-joined token prefix before comparing to stored slugs. Remaining tokens after the matched prefix = CHUNK_NAME.
+3. If no slug matches (unknown topic) or no remaining tokens (no chunk specified), call AskUserQuestion with up to 2 questions:
+   - If topic unknown: "Which topic?" — options: list known topic slugs from preferences.
+   - If chunk unknown (or "Other" selected): "Which chunk?" — options: `topics[TOPIC_SLUG].chunks` from preferences + "Other (type below)".
+4. CHUNK_SLUG = apply the Step 1b slug algorithm to CHUNK_NAME.
+
+**Research:**
+5. Read preferences for `STORED_EXPERIENCE`, `STORED_SESSION_MINUTES`, and `STORED_PURPOSE` (use "General understanding" if null). Use the **Agent tool directly** (not Workflow — no parallelism needed for a single chunk). Call Agent with this prompt, substituting real values:
+
+```
+You are a deep-dive research agent for one learning chunk.
+
+Topic: "[TOPIC part of SUBCOMMAND_ARGS]"
+Chunk: "[CHUNK_NAME]"
+Learner's purpose: "[STORED_PURPOSE]"
+Learner's experience level: "[STORED_EXPERIENCE]"
+
+Do the following:
+1. WebSearch: "[topic] [chunk name] tutorial" — find the single best explanation resource
+2. WebSearch: "[topic] [chunk name] common mistakes" — find real pitfalls
+3. WebSearch: "[topic] [chunk name] example walkthrough" — find a second high-quality resource (different source)
+
+Using your research and knowledge, return ONLY valid JSON matching this schema:
+{
+  "feynman_summary": "2 sentences explaining the chunk without jargon",
+  "key_concepts": ["concept 1", "concept 2", "concept 3"],
+  "practice_drill": {
+    "micro_skill": "specific action verb + target",
+    "success_condition": "concrete measurable outcome",
+    "duration_min": 25
+  },
+  "common_mistakes": ["mistake 1", "mistake 2"],
+  "best_resource": { "title": "...", "url": "...", "why": "..." },
+  "best_resource_2": { "title": "...", "url": "...", "why": "..." },
+  "worked_example": "Step-by-step walkthrough of one real example for this chunk (3–6 steps)"
+}
+```
+
+Use the `schema` parameter in the Agent call to enforce the JSON structure. In the schema object, `best_resource_2` and `worked_example` are optional — include them in `properties` but **omit them from the `required` array**. All other fields are required.
+
+**Assemble mini-guide in memory:**
+6. Build the mini-guide string:
+
+```markdown
+# [CHUNK_NAME] — Deep Dive
+*From: [SUBCOMMAND_ARGS] guide | Expert Learning Framework*
+
+## Why This Chunk Matters
+[feynman_summary from research]
+
+## Key Concepts
+[key_concepts as a numbered list — one sentence per concept]
+
+## Extended Drill
+
+**Micro-skill:** [micro_skill]
+**Session formula:** "I will [micro_skill], targeting [success_condition], for [session_minutes] min."
+**Success condition:** [success_condition]
+**Common mistakes:**
+- [common_mistakes bullet list]
+
+## Worked Example
+[worked example from research — step-by-step breakdown]
+
+## Resources
+| Resource | Why |
+|---|---|
+| [best_resource.title](best_resource.url) | [best_resource.why] |
+```
+
+If the research returned a non-empty `best_resource_2`, add a second row to the Resources table. If `worked_example` is present, populate the Worked Example section with it; otherwise write "No worked example available — try WebSearch for `[topic] [chunk] example walkthrough`."
+
+7. Write to `./<TOPIC_SLUG>-<CHUNK_SLUG>-deep-dive.md` in the current working directory using the Write tool.
+8. Output: "Deep dive saved: `./<TOPIC_SLUG>-<CHUNK_SLUG>-deep-dive.md`"
+
+No reviewer, no flashcard widget, no preferences update. Stop.
+
+---
+
+## FLOW Q — `/learn quiz <topic>`
+
+**Goal:** 4-question MCQ self-test from the user's existing guide.
+
+1. Compute TOPIC_SLUG by applying the Step 1b slug algorithm to SUBCOMMAND_ARGS.
+
+2. Use Bash to check if `./<TOPIC_SLUG>-learning-guide.md` exists in the current working directory. If not found, output: "Guide not found in current directory for [SUBCOMMAND_ARGS]. Run `/learn [SUBCOMMAND_ARGS]` first." and stop.
+
+3. Read `./<TOPIC_SLUG>-learning-guide.md` using the Read tool.
+
+4. Call the Agent tool (no agentType) with this prompt, substituting the full guide content:
+
+```
+You are a quiz generator. Given this learning guide, generate exactly 4 multiple-choice questions.
+
+Rules:
+- 2 conceptual questions (drawn from Phase 1 or Phase 2 content)
+- 2 application questions (drawn from Phase 3 drills or Phase 2 concept table)
+- Each question must be answerable from the guide alone — no outside knowledge required
+- Cover different chunks where possible
+
+For each question return: question_text (string), options (array of exactly 4 strings, no letter prefix), correct_index (integer 0–3), explanation (1 sentence explaining why the correct answer is right), chunk_name (the chunk this question covers).
+
+Return ONLY valid JSON:
+{ "questions": [{ "question_text": "...", "options": ["...","...","...","..."], "correct_index": 2, "explanation": "...", "chunk_name": "..." }] }
+
+--- GUIDE CONTENT ---
+[full guide content here]
+```
+
+5. Ask all 4 questions **one at a time** — 4 separate AskUserQuestion calls. For question i (0–3):
+   - Header: `Q[i+1] of 4`
+   - Question: `questions[i].question_text`
+   - Options: `questions[i].options` (the 4 strings)
+   - `multiSelect: false`
+   - After each call, record the user's selected option text (or its index) before moving to the next question.
+
+6. Score: for each question, check if the user's selected option matches `questions[i].options[questions[i].correct_index]`. Count total correct.
+
+7. Output:
+
+```
+## Quiz: [SUBCOMMAND_ARGS]
+Score: [N]/4
+
+[one line per question:]
+✓ Q1 ([chunk_name]): [question_text trimmed to ~50 chars]
+✗ Q2 ([chunk_name]): [question_text trimmed] — Correct: "[correct option text]". [explanation]
+
+[If score < 4:]
+Weak areas: [comma-separated chunk_names from wrong questions]
+Suggested: Run `/learn chunk [SUBCOMMAND_ARGS] [chunk_name]` for a deep dive on each.
+```
+
+Stop. No file writes, no preferences update.
+
+---
+
 ## STEP 2 — Load stored preferences
 
 Use Bash to get the home directory (`echo $HOME`), then Read `$HOME/.claude/learn-preferences.json`. (`TOPIC_SLUG` was already computed in Step 1.)
@@ -108,12 +333,18 @@ The schema is:
     "sql-window-functions": {
       "experience_level": "intermediate",
       "focus_areas": ["Ranking functions"],
-      "completed_chunks": ["PARTITION BY vs GROUP BY", "Ranking functions"]
+      "completed_chunks": ["PARTITION BY vs GROUP BY", "Ranking functions"],
+      "chunks": ["PARTITION BY vs GROUP BY", "Ranking functions", "Window frame boundaries", "Named windows"],
+      "purpose": "Write complex analytics queries at work",
+      "last_studied": "2026-06-24"
     },
     "jazz-piano": {
       "experience_level": "beginner",
       "focus_areas": ["Chord progressions", "Improvisation"],
-      "completed_chunks": []
+      "completed_chunks": [],
+      "chunks": ["Basic chord shapes", "Chord progressions", "Scales", "Improvisation basics"],
+      "purpose": "Play at open mics",
+      "last_studied": "2026-06-20"
     }
   }
 }
@@ -162,6 +393,7 @@ Merge answers into the preferences file and write it back:
 - Set `topics[TOPIC_SLUG].focus_areas` from the angle answer (array of selected strings; omit if angle question was skipped for narrow topics)
 - Set `topics[TOPIC_SLUG].completed_chunks` = `STORED_COMPLETED_CHUNKS` (preserve as-is — Step 7.7 is the only place that updates this field)
 - Set `default_session_minutes` from the answer (or existing `STORED_SESSION_MINUTES`)
+- Set `topics[TOPIC_SLUG].purpose` = `user_purpose` (the joined goals string)
 - Preserve all other existing topic entries unchanged
 - Use Write tool to save
 
@@ -586,6 +818,8 @@ Using the Write tool, write both files to the current working directory:
 2. Write `FLASHCARD_HTML` (assembled in Section 8 of Step 7) to `./<topic-slug>-flashcards.html`
 
 Both writes happen here — after reviewer approval — so the files on disk are always a consistent, verified pair.
+
+3. Use Bash to get today's date (`date +%Y-%m-%d`). Re-read the preferences file, set `topics[TOPIC_SLUG].last_studied` to today's date string, preserve all other fields, write the full merged object back using the Write tool.
 
 ---
 

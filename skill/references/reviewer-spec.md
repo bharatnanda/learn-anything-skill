@@ -126,6 +126,7 @@ The Interactive Flashcards section must contain a markdown link to a separate `.
 - Table must have one data row per chunk in `expected_chunks`
 - Each row must contain a markdown link `[text](url)` — not just plain text
 - The URL must not be a placeholder like `(url)` literally or `(https://example.com)`
+- The URL must not be a bare domain (path is `/` or empty) or a single-segment shallow path matching a known index pattern: `/terms/<word>`, `/glossary/<word>`, or `/wiki/<word>` with no further sub-path. These are glossary/index entries, not tutorial articles. Flag with `check: "shallow_url"`, fix: "Replace with a URL pointing to a specific tutorial, guide, or deep content page for this chunk."
 - Each row must have a non-empty "Why this one" column
 
 ### 7. At a Glance table (severity: error)

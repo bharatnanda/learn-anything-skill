@@ -204,8 +204,9 @@ Do the following:
 1. WebSearch: "[topic] [chunk name] tutorial" — find the single best explanation resource
 2. WebSearch: "[topic] [chunk name] common mistakes" — find real pitfalls
 3. WebSearch: "[topic] [chunk name] example walkthrough" — find a second high-quality resource (different source)
+4. Verify the URL from step 1 with WebFetch. Apply the same 3-signal check: (a) chunk name or synonym in page text, (b) URL path has more than one non-empty segment, (c) page text > 300 words. If fewer than 2 signals pass, or WebFetch errors, try the URL from step 3 instead. Apply the same verification to best_resource_2 (use step 3 URL, or step 2 URL as fallback). Append "(unverified — fetch failed)" to the `why` field only if all candidates failed WebFetch entirely.
 
-Using your research and knowledge, return ONLY valid JSON matching this schema:
+Using your research and verification results, return ONLY valid JSON matching this schema:
 {
   "feynman_summary": "2 sentences explaining the chunk without jargon",
   "key_concepts": ["concept 1", "concept 2", "concept 3"],
@@ -500,7 +501,13 @@ ${focusAreas.length > 0 ? `The learner specifically wants to focus on: ${focusAr
 Do the following:
 1. WebSearch: "${topic} ${chunk.name} tutorial" — find the single best explanation resource (a specific tutorial page, video, or article, not just a homepage)
 2. WebSearch: "${topic} ${chunk.name} common mistakes beginners" — find real pitfalls
-3. Using both search results and your knowledge, produce a research object.
+3. Verify the URL from step 1 with WebFetch:
+   - Call WebFetch on the candidate URL.
+   - If WebFetch returns an error (4xx, 5xx, network failure, or redirects to a homepage): mark this URL unavailable. Try the next most relevant result from your step 1 search and use it if it passes.
+   - If WebFetch succeeds: scan the first ~2000 characters of the returned page for a content signal. At least 2 of these 3 must be present: (a) the chunk name or a close synonym appears in the page text; (b) the URL path has more than one non-empty segment (not a bare domain or single-segment slug like /terms or /glossary); (c) the page text contains more than 300 words. If fewer than 2 signals pass, treat the URL as shallow/homepage-level and fall back to the next candidate.
+   - If WebFetch cannot retrieve content at all (network blocked, JS-only shell with no text): keep the URL only if the search result snippet clearly describes the expected content; otherwise try a different candidate.
+   - If all candidates fail, use the best-ranked URL from your searches and append "(unverified — fetch failed)" to best_resource.why.
+4. Using both search results, the verification result, and your knowledge, produce a research object.
 
 Key concepts must be 2–4 concrete, nameable things the learner must understand within this chunk.
 The practice drill must be a specific, measurable activity — not "practice X" but "do X until you achieve Y in Z minutes".

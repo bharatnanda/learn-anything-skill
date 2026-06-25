@@ -124,11 +124,13 @@ Deep-dive mini-guide for one chunk you're stuck on. Saved to `./<topic-slug>-<ch
   ├── Workflow: parallel web research agents (one per chunk)
   │     ├── WebSearch: best resource per chunk (weighted toward focus areas)
   │     ├── WebSearch: common beginner mistakes
-  │     └── Return: key concepts, drill, resource, connections
+  │     ├── WebFetch: verify candidate URL loads, is a specific article (not a homepage),
+  │     │   and contains relevant content — fallback to next search result if it fails
+  │     └── Return: key concepts, drill, verified resource URL, connections
   ├── Synthesise full guide (8 sections) + flashcard HTML file
   ├── Review agent: verify quality before saving
-  │     └── Checks: all sections present, drills measurable,
-  │           no placeholders, resources have real URLs
+  │     └── Checks: all sections present, drills measurable, no placeholders,
+  │           resources have real URLs, no shallow glossary/homepage links
   ├── Save <topic-slug>-learning-guide.md + <topic-slug>-flashcards.html
   └── Ask: which chunks completed? → save progress + last_studied to preferences
 
@@ -147,7 +149,7 @@ Deep-dive mini-guide for one chunk you're stuck on. Saved to `./<topic-slug>-<ch
 
 /learn chunk <topic> <chunk-name>
   ├── Parse topic slug (longest-match against known slugs) + chunk name
-  ├── Agent: deep-dive research (3 web searches, worked example, 2 resources)
+  ├── Agent: deep-dive research (3 web searches, WebFetch URL verification, worked example, 2 resources)
   └── Save <topic-slug>-<chunk-slug>-deep-dive.md
 
 /learn quiz <topic>
